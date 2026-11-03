@@ -2,6 +2,7 @@
 #include <linux/build_bug.h>
 #include <linux/console.h>
 #include <linux/init.h>
+#include <linux/kernel.h>
 #include <linux/memblock.h>
 #include <linux/sched/task.h>
 #include <linux/sched/task_stack.h>
@@ -13,15 +14,24 @@
 
 char *empty_zero_page;
 
+static int __init parse_mem(char *arg)
+{
+	ish_phys_size = memparse(arg, &arg);
+	return 0;
+}
+early_param("mem", parse_mem);
+
 void __init setup_arch(char **cmdline_p)
 {
 	unsigned long zone_pfns[MAX_NR_ZONES] = {};
 	unsigned i;
 
 	*cmdline_p = boot_command_line;
+
+	/* Default guest RAM; overridable with mem=size on the command line. */
+	ish_phys_size = 0x10000000;
 	parse_early_param();
 
-	ish_phys_size = 0x10000000;
 	ish_phys_base = (unsigned long) host_mmap((void *) 0x200000000, ish_phys_size);
 	memblock_add(__pa(ish_phys_base), ish_phys_size);
 
