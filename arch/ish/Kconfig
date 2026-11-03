@@ -84,7 +84,7 @@ config HZ
 
 config PGTABLE_LEVELS
 	int
-	default 3
+	default 4
 
 config NO_DMA
 	def_bool y

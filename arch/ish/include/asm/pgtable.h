@@ -1,28 +1,34 @@
 #ifndef __ASM_ISH_PGTABLE_H
 #define __ASM_ISH_PGTABLE_H
 
-#include <asm-generic/pgtable-nopud.h>
+#include <asm-generic/pgtable-nop4d.h>
 
-// everything else should be defined based on these
-// TODO flex this a bit depending on whether the host is 64 bit?
-#define _POINTER_BITS 32
-#define _PGD_BITS 2
+// 48-bit virtual address space with 4-level page tables (matching arm64's
+// 4K-page layout): PGD(9) -> PUD(9) -> PMD(9) -> PTE(9) = 36 bits of page
+// number plus PAGE_SHIFT(12) = 48.
+#define _POINTER_BITS 48
+#define _PGD_BITS 9
+#define _PUD_BITS 9
 #define _PMD_BITS 9
 #define _PTE_BITS 9
 
 #define PTRS_PER_PGD	(1UL << _PGD_BITS)
+#define PTRS_PER_PUD	(1UL << _PUD_BITS)
 #define PTRS_PER_PMD	(1UL << _PMD_BITS)
 #define PTRS_PER_PTE	(1UL << _PTE_BITS)
 #define PGDIR_SHIFT	(_POINTER_BITS - _PGD_BITS)
 #define PGDIR_SIZE	(1UL << PGDIR_SHIFT)
 #define PGDIR_MASK	(~(PGDIR_SIZE-1))
-#define PMD_SHIFT	(PGDIR_SHIFT - _PMD_BITS)
+#define PUD_SHIFT	(PGDIR_SHIFT - _PUD_BITS)
+#define PUD_SIZE	(1UL << PUD_SHIFT)
+#define PUD_MASK	(~(PUD_SIZE-1))
+#define PMD_SHIFT	(PUD_SHIFT - _PMD_BITS)
 #define PMD_SIZE	(1UL << PMD_SHIFT)
 #define PMD_MASK	(~(PMD_SIZE-1))
 #define USER_PTRS_PER_PGD ((TASK_SIZE + (PGDIR_SIZE - 1)) / PGDIR_SIZE)
 #define FIRST_USER_ADDRESS 0
 
-#if _PGD_BITS + _PMD_BITS + _PTE_BITS + PAGE_SHIFT != _POINTER_BITS
+#if _PGD_BITS + _PUD_BITS + _PMD_BITS + _PTE_BITS + PAGE_SHIFT != _POINTER_BITS
 #error "pagetables don't line up!"
 #endif
 
@@ -50,6 +56,10 @@
 #define pmd_page(x)		virt_to_page(pmd_val(x) & PAGE_MASK)
 #define pmd_page_vaddr(x)	(pmd_val(x) & _PAGE_CHG_MASK)
 #define pud_pgtable(x)		((pmd_t *) (pud_val(x) & _PAGE_CHG_MASK))
+#define pud_page(x)		virt_to_page(pud_val(x) & PAGE_MASK)
+#define pud_page_vaddr(x)	(pud_val(x) & _PAGE_CHG_MASK)
+#define p4d_pgtable(p4d)	((pud_t *) (p4d_val(p4d) & _PAGE_CHG_MASK))
+#define p4d_page(p4d)		virt_to_page(p4d_val(p4d) & PAGE_MASK)
 
 /* appears to be garbage */
 #define pmd_bad(x)	0
@@ -60,6 +70,15 @@
 #define pud_none(x)	(pud_val(x) == 0)
 #define pud_present(x)	(pud_val(x) != 0)
 #define pud_clear(pud)	do { pud_val(*(pud)) = 0; } while (0)
+#define set_pud(pudp, pud)	do { *(pudp) = pud; } while (0)
+#define set_pud_at(mm, addr, pudp, pud)	set_pud(pudp, pud)
+
+/* p4d is folded into pgd (pgtable-nop4d.h); the pgd entry is really the p4d
+ * entry and points at a pud table, so these test the folded value. */
+#define p4d_none(x)		(p4d_val(x) == 0)
+#define p4d_present(x)		(p4d_val(x) != 0)
+#define p4d_bad(x)		0
+#define p4d_clear(p4d)		do { p4d_val(*(p4d)) = 0; } while (0)
 
 #define mk_pte(page, pgprot)	pfn_pte(page_to_pfn(page), (pgprot))
 #define pte_modify(pte, prot)	(__pte((pte_val(pte) & _PAGE_CHG_MASK) | pgprot_val(prot)))
@@ -72,6 +91,8 @@
 	printk("%s:%d: bad pte %08lx.\n", __FILE__, __LINE__, pte_val(e))
 #define pmd_ERROR(e) \
 	printk("%s:%d: bad pmd %08lx.\n", __FILE__, __LINE__, pmd_val(e))
+#define pud_ERROR(e) \
+	printk("%s:%d: bad pud %08lx.\n", __FILE__, __LINE__, pud_val(e))
 #define pgd_ERROR(e) \
 	printk("%s:%d: bad pgd %08lx.\n", __FILE__, __LINE__, pgd_val(e))
 
