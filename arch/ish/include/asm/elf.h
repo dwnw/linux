@@ -19,7 +19,8 @@ do {									\
 	SET_PERSONALITY(ex);						\
 } while (0)
 
-#define ELF_PLATFORM "i686"
+#define ELF_PLATFORM "aarch64"
+#define COMPAT_ELF_PLATFORM "i686"
 
 typedef u32 elf_greg_t;
 /* #define ELF_NGREG (sizeof(struct user_regs_struct) / sizeof(elf_greg_t)) */
@@ -33,9 +34,11 @@ typedef elf_greg_t elf_fpregset_t[ELF_NFPREG];
 
 /*
  * This is used to ensure we don't load something for the wrong architecture.
+ * Native is AArch64; 32-bit i386 binaries are handled by the compat binfmt
+ * (fs/compat_binfmt_elf.c renames elf_check_arch to compat_elf_check_arch).
  */
 #define elf_check_arch(x) \
-	compat_elf_check_arch(x)
+	(((x)->e_machine == EM_AARCH64))
 #define compat_elf_check_arch(x) \
 	(((x)->e_machine == EM_386) || ((x)->e_machine == EM_486))
 
@@ -86,9 +89,9 @@ do {						\
 /*
  * These are used to set parameters in the core dumps.
  */
-#define ELF_CLASS	ELFCLASS32
+#define ELF_CLASS	ELFCLASS64
 #define ELF_DATA	ELFDATA2LSB
-#define ELF_ARCH	EM_386
+#define ELF_ARCH	EM_AARCH64
 
 #define ELF_EXEC_PAGESIZE 4096
 
