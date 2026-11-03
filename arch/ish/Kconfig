@@ -69,6 +69,17 @@ config MMU
 	bool
 	default y
 
+config ISH_PUD_SELFTEST
+	bool "Run a boot-time self-test of the 4th (PUD) page-table level"
+	default n
+	depends on MMU
+	help
+	  Widen TASK_SIZE to the native 47-bit limit and run a kernel-side
+	  self-test at boot that maps, COWs and tears down pages across
+	  several PGD/PUD slots (including above 4 GiB), checking for leaked
+	  page-table pages. This is a test-only configuration; it is not
+	  compatible with running the usual 32-bit guest.
+
 config SMP
 	bool "Symmetric multi-processing support"
 	default y

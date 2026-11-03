@@ -34,7 +34,12 @@ struct thread_struct {
 { \
 }
 
+#ifdef CONFIG_ISH_PUD_SELFTEST
+/* Test-only: native 47-bit user VA so the PUD self-test can reach >4 GiB. */
+#define TASK_SIZE 0x00007ffffffff000UL
+#else
 #define TASK_SIZE 0xffffe000
+#endif
 
 /*
  * This decides where the kernel will search for a free chunk of vm
