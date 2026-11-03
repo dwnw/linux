@@ -34,12 +34,19 @@ struct thread_struct {
 { \
 }
 
-#ifdef CONFIG_ISH_PUD_SELFTEST
-/* Test-only: native 47-bit user VA so the PUD self-test can reach >4 GiB. */
-#define TASK_SIZE 0x00007ffffffff000UL
-#else
-#define TASK_SIZE 0xffffe000
-#endif
+/*
+ * Native (64-bit/AArch64) user VA limit. Page tables cover this range for
+ * every task regardless of ABI (USER_PTRS_PER_PGD is derived from it), so
+ * allocation and teardown are ABI-independent.
+ */
+#define TASK_SIZE_MAX	0x00007ffffffff000UL
+
+/*
+ * Per-task user VA limit. i386 (compat) tasks keep the historical 4 GiB
+ * layout; native 64-bit tasks get the full 47-bit range. Kernel threads have
+ * TIF_32BIT clear and therefore see TASK_SIZE_MAX.
+ */
+#define TASK_SIZE	(is_compat_task() ? 0xffffe000UL : TASK_SIZE_MAX)
 
 /*
  * This decides where the kernel will search for a free chunk of vm
@@ -60,7 +67,13 @@ extern void start_thread(struct pt_regs *regs, unsigned long entry,
 			 unsigned long stack);
 
 #define STACK_TOP	TASK_SIZE
-#define STACK_TOP_MAX	STACK_TOP
+/*
+ * bprm_mm_init() runs before SET_PERSONALITY2(), and forked children already
+ * carry the inherited ABI flag, so STACK_TOP_MAX can follow the per-task
+ * TASK_SIZE. This avoids a pointless (and expensive) 47-bit -> 32-bit
+ * stack shift for i386 execs.
+ */
+#define STACK_TOP_MAX	TASK_SIZE
 
 #endif
 

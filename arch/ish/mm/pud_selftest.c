@@ -2,9 +2,9 @@
 //
 // Kernel-side self-test for the 4th (PUD) page-table level.
 //
-// Enabled by CONFIG_ISH_PUD_SELFTEST, which also widens TASK_SIZE to the
-// native 47-bit limit so this test can reach addresses above 4 GiB. It runs
-// in a kthread with a throwaway mm, so it never touches a real user process.
+// Enabled by CONFIG_ISH_PUD_SELFTEST. The test kthread marks itself native
+// (TIF_64BIT) so it gets the 47-bit task size and can reach addresses above
+// 4 GiB. It runs with a throwaway mm, so it never touches a real user process.
 //
 // It maps and faults pages at addresses that span several PGD and PUD slots
 // (including above 4 GiB and near the 47-bit limit), clones them fork-style
@@ -110,6 +110,9 @@ static int pud_selftest_fn(void *arg)
 	unsigned long dst_zero, dst_mapped, dst_after;
 	long delta;
 	int i;
+
+	/* Behave like a native (64-bit) task so TASK_SIZE is the 47-bit max. */
+	set_thread_flag(TIF_64BIT);
 
 	src = mm_alloc();
 	if (!src) {

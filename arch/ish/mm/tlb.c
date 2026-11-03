@@ -21,6 +21,9 @@ static void flush_tlb_mm_range(struct mm_struct *mm, unsigned long start, unsign
 
 void flush_tlb_mm(struct mm_struct *mm)
 {
+	/* The x86 emulator's TLB is 32-bit (page_t is u32), so flush only the
+	 * task's user range. i386 tasks stay below 4 GiB; native tasks will be
+	 * handled by the aarch64 engine's own flush in the 2c bridge. */
 	flush_tlb_mm_range(mm, 0, TASK_SIZE);
 }
 void flush_tlb_range(struct vm_area_struct *vma, unsigned long start, unsigned long end)

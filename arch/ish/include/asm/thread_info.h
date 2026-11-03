@@ -29,6 +29,15 @@ struct thread_info {
 #define TIF_NOTIFY_SIGNAL	3	/* signal notifications exist */
 #define TIF_NOTIFY_RESUME	4	/* callback before returning to user */
 #define TIF_MEMDIE		5	/* is terminating due to OOM killer */
+#define TIF_64BIT		6	/* native 64-bit (AArch64) ABI task */
+
+#ifndef __ASSEMBLY__
+/* Tasks are 32-bit (compat) unless they exec a 64-bit ELF and set TIF_64BIT.
+ * Defaulting to compat keeps the first exec (kernel_init, before it knows the
+ * binary class) and all kernel threads within the 4 GiB x86 address space;
+ * the PUD self-test marks its own kthread native explicitly. */
+#define is_compat_task()	(!test_thread_flag(TIF_64BIT))
+#endif
 
 #endif
 

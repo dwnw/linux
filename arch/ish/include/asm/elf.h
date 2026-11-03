@@ -3,6 +3,22 @@
 
 /* TODO: don't hard code ABIs like this? it sucks? seriously this entire file sucks @abi */
 
+/*
+ * Select the task's ABI from the ELF class at exec time. 64-bit binaries
+ * (AArch64, added later) set TIF_64BIT and get the native 47-bit task size;
+ * 32-bit (i386) binaries clear it and keep the 4 GiB limit. This runs before
+ * setup_arg_pages()/STACK_TOP are used, so the per-task TASK_SIZE is already
+ * correct.
+ */
+#define SET_PERSONALITY2(ex, state)					\
+do {									\
+	if ((ex).e_ident[EI_CLASS] == ELFCLASS64)			\
+		set_thread_flag(TIF_64BIT);				\
+	else								\
+		clear_thread_flag(TIF_64BIT);				\
+	SET_PERSONALITY(ex);						\
+} while (0)
+
 #define ELF_PLATFORM "i686"
 
 typedef u32 elf_greg_t;
