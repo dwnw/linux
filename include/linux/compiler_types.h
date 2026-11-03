@@ -357,4 +357,12 @@ struct ftrace_likely_data {
 #define __diag_error(compiler, version, option, comment) \
 	__diag_ ## compiler(version, error, option)
 
+/*
+ * __DECLARE_FLEX_ARRAY() - Declare a flexible array member that can be used
+ * in a union or standalone.  Wrapped in an anonymous struct with a named
+ * empty member so that sizeof/offsetof still work.
+ */
+#define __DECLARE_FLEX_ARRAY(TYPE, NAME)	\
+	struct { struct { } __empty_ ## NAME; TYPE NAME[]; }
+
 #endif /* __LINUX_COMPILER_TYPES_H */
