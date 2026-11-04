@@ -96,6 +96,46 @@ SYSCALL_DEFINE6(mmap, unsigned long, addr, unsigned long, len,
 
 
 /*
+ * AArch64 differs from the kernel's asm-generic O_* values on four flags:
+ *   aarch64 O_DIRECTORY 040000  vs generic 0200000
+ *   aarch64 O_NOFOLLOW  0100000 vs generic 0400000
+ *   aarch64 O_DIRECT    0200000 vs generic 040000
+ *   aarch64 O_LARGEFILE 0400000 vs generic 0100000
+ * Swap those bit positions at the boundary (the permutation is self-inverse).
+ */
+static unsigned long a64_open_flags(unsigned long f)
+{
+	unsigned long t = f;
+
+	if (f & 0x4000)  t |= 0x10000; else t &= ~0x10000UL; /* O_DIRECTORY */
+	if (f & 0x8000)  t |= 0x20000; else t &= ~0x20000UL; /* O_NOFOLLOW  */
+	if (f & 0x10000) t |= 0x4000;  else t &= ~0x4000UL;  /* O_DIRECT    */
+	if (f & 0x20000) t |= 0x8000;  else t &= ~0x8000UL;  /* O_LARGEFILE */
+	return t;
+}
+
+long sys_a64_openat(unsigned long dfd, unsigned long filename,
+		    unsigned long flags, unsigned long mode,
+		    unsigned long a4, unsigned long a5)
+{
+	return sys_openat((int) dfd, (const char __user *) filename,
+			  (int) a64_open_flags(flags), (umode_t) mode);
+}
+
+long sys_a64_fcntl(unsigned long fd, unsigned long cmd, unsigned long arg,
+		   unsigned long a3, unsigned long a4, unsigned long a5)
+{
+	long ret;
+
+	if (cmd == 4)		/* F_SETFL: incoming flags */
+		arg = a64_open_flags(arg);
+	ret = sys_fcntl((unsigned int) fd, (unsigned int) cmd, arg);
+	if (cmd == 3 && ret >= 0)	/* F_GETFL: returned flags */
+		ret = (long) a64_open_flags((unsigned long) ret);
+	return ret;
+}
+
+/*
  * Sanity check that the generic AArch64 table is fully populated: every slot
  * must be a real entry (holes are sys_ni_syscall, never NULL). Runs at boot.
  */
@@ -128,6 +168,9 @@ static int __init a64_stat_family_override(void)
 	/* AArch64 numbers are ABI-stable: __NR_fstat = 80, __NR_newfstatat = 79. */
 	sys_call_table64[80] = sys_a64_fstat;
 	sys_call_table64[79] = sys_a64_newfstatat;
+	/* aarch64 open/fcntl use aarch64 O_* flag values */
+	sys_call_table64[56] = sys_a64_openat;   /* openat */
+	sys_call_table64[25] = sys_a64_fcntl;    /* fcntl  */
 	return 0;
 }
 late_initcall(a64_stat_family_override);
