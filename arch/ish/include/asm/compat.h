@@ -3,7 +3,8 @@
 
 static inline bool in_ia32_syscall(void)
 {
-	return true;
+	/* True only for a 32-bit (i386 compat) task, not for native AArch64. */
+	return is_compat_task();
 }
 static inline void __user *arch_compat_alloc_user_space(long len)
 {
