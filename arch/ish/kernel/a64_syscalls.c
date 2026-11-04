@@ -15,14 +15,6 @@ SYSCALL_DEFINE6(mmap, unsigned long, addr, unsigned long, len,
 	return ksys_mmap_pgoff(addr, len, prot, flags, fd, off >> PAGE_SHIFT);
 }
 
-/*
- * AArch64 rt_sigreturn is implemented together with the aarch64 rt_sigframe
- * in a later step; keep a valid table entry until then.
- */
-SYSCALL_DEFINE0(rt_sigreturn)
-{
-	return -ENOSYS;
-}
 
 /*
  * Sanity check that the generic AArch64 table is fully populated: every slot

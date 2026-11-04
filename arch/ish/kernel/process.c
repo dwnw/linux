@@ -54,6 +54,11 @@ struct pt_regs *emu_pt_regs(struct emu *emu)
 	return &container_of(emu, struct thread_struct, emu)->regs;
 }
 
+void *emu_fpsimd(struct emu *emu)
+{
+	return &container_of(emu, struct thread_struct, emu)->fpsimd;
+}
+
 static bool log_syscalls;
 core_param(log_syscalls, log_syscalls, bool, 0644);
 

@@ -14,6 +14,8 @@ extern int ia32_setup_rt_frame(int sig, struct ksignal *ksig,
 			compat_sigset_t *set, struct pt_regs *regs);
 extern int ia32_setup_frame(int sig, struct ksignal *ksig,
 		     compat_sigset_t *set, struct pt_regs *regs);
+extern int setup_rt_frame_a64(int sig, struct ksignal *ksig,
+			      sigset_t *set, struct pt_regs *regs);
 
 static void set_retval_eintr(struct pt_regs *regs)
 {
@@ -73,10 +75,13 @@ static void handle_signal(struct ksignal *ksig, struct pt_regs *regs)
 	set = sigmask_to_save();
 	cset = (compat_sigset_t *) set;
 
-	if (ksig->ka.sa.sa_flags & SA_SIGINFO)
+	if (!is_compat_task()) {
+		err = setup_rt_frame_a64(ksig->sig, ksig, set, regs);
+	} else if (ksig->ka.sa.sa_flags & SA_SIGINFO) {
 		err = ia32_setup_rt_frame(ksig->sig, ksig, cset, regs);
-	else
+	} else {
 		err = ia32_setup_frame(ksig->sig, ksig, cset, regs);
+	}
 	signal_setup_done(err, ksig, 0 /* TODO @ptrace single_step */);
 }
 
