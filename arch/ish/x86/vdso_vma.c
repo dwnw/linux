@@ -31,6 +31,14 @@ int arch_setup_additional_pages(struct linux_binprm *bprm, int uses_interp)
 	unsigned long vdso_base, vdso_len;
 	int err = 0;
 
+	/*
+	 * This is the i386 vDSO. Native (AArch64) tasks must not get it; until
+	 * the aarch64 vDSO exists, skip mapping for them. (AT_SYSINFO_EHDR is
+	 * only emitted when this is actually installed.)
+	 */
+	if (!is_compat_task())
+		return 0;
+
 	if (mmap_write_lock_killable(mm))
 		return -EINTR;
 	vdso_len = vdso_pages << PAGE_SHIFT;
