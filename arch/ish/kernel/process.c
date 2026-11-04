@@ -195,7 +195,11 @@ int copy_thread(unsigned long clone_flags, unsigned long usp,
 		unsigned long arg, struct task_struct *p, unsigned long tls)
 {
 	*task_pt_regs(p) = *current_pt_regs();
-	task_pt_regs(p)->ax = 0;
+	/* Child returns 0 from fork/clone in its ABI's return register. */
+	if (is_compat_task())
+		task_pt_regs(p)->ax = 0;
+	else
+		task_pt_regs(p)->regs[0] = 0;
 	if (clone_flags & CLONE_SETTLS) {
 		int err = do_set_thread_area(p, (struct user_desc __user *) tls);
 		if (err < 0)
