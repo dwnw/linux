@@ -20,10 +20,20 @@ static inline unsigned long __get_wchan(struct task_struct *p)
 
 extern void release_thread(struct task_struct *task);
 
+/* Per-task AArch64 FP/SIMD state (lazily meaningful once the a64 engine runs).
+ * Saved/restored across context switch and signal delivery; copied on fork via
+ * arch_dup_task_struct(). */
+struct a64_fpsimd_state {
+	unsigned long vregs[32][2];	/* V0..V31, 128-bit each */
+	unsigned long fpcr;
+	unsigned long fpsr;
+};
+
 struct thread_struct {
 	struct emu emu;
 	struct pt_regs regs;
 	kjmp_buf kernel_regs;
+	struct a64_fpsimd_state fpsimd;
 	struct {
 		void (*func)(void *);
 		void *arg;

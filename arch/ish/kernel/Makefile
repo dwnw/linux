@@ -6,7 +6,7 @@ ifdef CONFIG_HOST_LINUX
 endif
 
 obj-y := cpu.o irq.o mem.o reboot.o setup.o signal.o time.o trap.o process.o \
-	ptrace.o uaccess.o syscalls.o tls.o stacktrace.o user_util.o
+	ptrace.o uaccess.o syscalls.o a64_syscalls.o tls.o stacktrace.o user_util.o
 
 obj-y += syscalls_user.o irq_user.o time_user.o poll_user.o threads_user.o setup_user.o random_user.o
 obj-y += setjmp.o

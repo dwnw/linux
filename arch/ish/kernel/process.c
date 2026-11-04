@@ -20,10 +20,17 @@ void show_regs(struct pt_regs *regs)
 	printk("<regs would go here>\n");
 }
 
-void start_thread(struct pt_regs *regs, unsigned long eip, unsigned long esp)
+void start_thread(struct pt_regs *regs, unsigned long entry, unsigned long stack)
 {
-	regs->ip = eip;
-	regs->sp = esp;
+	if (is_compat_task()) {
+		regs->ip = entry;
+		regs->sp = stack;
+	} else {
+		regs->pc = entry;
+		regs->sp = stack;
+		regs->pstate = PSR_MODE_EL0t;
+		regs->regs[0] = 0;
+	}
 }
 EXPORT_SYMBOL(start_thread);
 void flush_thread(void)
@@ -61,7 +68,13 @@ void handle_cpu_trap(struct emu *emu)
 
 	check_irqs();
 
-	regs->orig_ax = regs->ax;
+	if (is_compat_task()) {
+		regs->orig_ax = regs->ax;
+	} else if (regs->trap_nr != A64_TRAP_SVC) {
+		/* Not a syscall: make sure restart logic does not misfire. */
+		regs->syscallno = -1;
+	}
+
 	if (regs->trap_nr == 6) {
 		/* undefined instruction */
 		char buf[16];
@@ -104,6 +117,44 @@ void handle_cpu_trap(struct emu *emu)
 			       regs->dx, regs->ax);
 		}
 		trace_syscall_exit(regs);
+	} else if (regs->trap_nr == A64_TRAP_SVC) {
+		/* AArch64 syscall: number in x8, args in x0..x5, result in x0. */
+		unsigned long (*syscall)(unsigned long, unsigned long,
+					 unsigned long, unsigned long,
+					 unsigned long, unsigned long);
+
+		if (regs->syscallno < 0 ||
+		    (unsigned long) regs->syscallno >= sys_call_table64_len) {
+			show_signal(current, "syscall out of range", regs->syscallno);
+			force_sig_fault(SIGSYS, SI_KERNEL, 0);
+			goto signal;
+		}
+		syscall = sys_call_table64[regs->syscallno];
+		regs->orig_x0 = regs->regs[0];	/* saved for restart */
+		if (trace_syscall_enter(regs))
+			goto signal;
+		regs->regs[0] = syscall(regs->regs[0], regs->regs[1],
+					regs->regs[2], regs->regs[3],
+					regs->regs[4], regs->regs[5]);
+		trace_syscall_exit(regs);
+	} else if (regs->trap_nr == A64_TRAP_DATA_ABORT) {
+		int code;
+		int err = handle_page_fault(regs->far, !!(regs->esr & ESR_EL1_WNR),
+					    &code);
+		if (err != 0) {
+			show_signal(current, "data abort", regs->far);
+			force_sig_fault(SIGSEGV, code, (void __user *) regs->far);
+		}
+	} else if (regs->trap_nr == A64_TRAP_INSN_ABORT) {
+		int code;
+		int err = handle_page_fault(regs->far, 0, &code);
+		if (err != 0) {
+			show_signal(current, "insn abort", regs->far);
+			force_sig_fault(SIGSEGV, code, (void __user *) regs->far);
+		}
+	} else if (regs->trap_nr == A64_TRAP_UNDEF) {
+		show_signal(current, "undefined", regs->far);
+		force_sig_fault(SIGILL, SI_KERNEL, (void __user *) regs->far);
 	} else if (regs->trap_nr == 0x20) {
 		/* timer */
 	} else {

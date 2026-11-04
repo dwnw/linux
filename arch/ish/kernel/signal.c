@@ -15,6 +15,32 @@ extern int ia32_setup_rt_frame(int sig, struct ksignal *ksig,
 extern int ia32_setup_frame(int sig, struct ksignal *ksig,
 		     compat_sigset_t *set, struct pt_regs *regs);
 
+static void set_retval_eintr(struct pt_regs *regs)
+{
+	if (is_compat_task())
+		regs->ax = -EINTR;
+	else
+		regs->regs[0] = -EINTR;
+}
+
+/*
+ * Rewind to just before the syscall instruction and restore the first
+ * argument so the syscall re-executes. i386 uses int 0x80 (2 bytes) and
+ * restores ax from orig_ax; AArch64 uses svc (4 bytes) and restores x0 from
+ * orig_x0. The restart_syscall NR differs too (0 vs 128).
+ */
+static void rewind_syscall(struct pt_regs *regs, bool restartblock)
+{
+	if (is_compat_task()) {
+		regs->ax = restartblock ? __NR_restart_syscall : regs->orig_ax;
+		regs->ip -= 2;
+	} else {
+		regs->regs[0] = restartblock ? 128 /* generic __NR_restart_syscall */
+					     : regs->orig_x0;
+		regs->pc -= 4;
+	}
+}
+
 static void handle_signal(struct ksignal *ksig, struct pt_regs *regs)
 {
 	int err;
@@ -27,18 +53,17 @@ static void handle_signal(struct ksignal *ksig, struct pt_regs *regs)
 		switch (syscall_get_error(current, regs)) {
 		case -ERESTART_RESTARTBLOCK:
 		case -ERESTARTNOHAND:
-			regs->ax = -EINTR;
+			set_retval_eintr(regs);
 			break;
 
 		case -ERESTARTSYS:
 			if (!(ksig->ka.sa.sa_flags & SA_RESTART)) {
-				regs->ax = -EINTR;
+				set_retval_eintr(regs);
 				break;
 			}
 		/* fallthrough */
 		case -ERESTARTNOINTR:
-			regs->ax = regs->orig_ax;
-			regs->ip -= 2;
+			rewind_syscall(regs, false);
 			break;
 		}
 	}
@@ -71,13 +96,11 @@ void do_signal(struct pt_regs *regs)
 		case -ERESTARTNOHAND:
 		case -ERESTARTSYS:
 		case -ERESTARTNOINTR:
-			regs->ax = regs->orig_ax;
-			regs->ip -= 2;
+			rewind_syscall(regs, false);
 			break;
 
 		case -ERESTART_RESTARTBLOCK:
-			regs->ax = __NR_restart_syscall;
-			regs->ip -= 2;
+			rewind_syscall(regs, true);
 			break;
 		}
 	}
