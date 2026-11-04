@@ -135,6 +135,10 @@ void handle_cpu_trap(struct emu *emu)
 			goto signal;
 		}
 		syscall = sys_call_table64[regs->syscallno];
+		if (log_syscalls)
+			printk("a64[%d] svc %ld x0=%#lx x1=%#lx x2=%#lx pc=%#lx\n",
+			       task_pid_nr(current), regs->syscallno, regs->regs[0],
+			       regs->regs[1], regs->regs[2], regs->pc);
 		regs->orig_x0 = regs->regs[0];	/* saved for restart */
 		if (trace_syscall_enter(regs))
 			goto signal;
