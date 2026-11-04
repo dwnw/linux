@@ -76,7 +76,13 @@ static_assert(offsetof(struct pt_regs, error_code) == 112, "pt_regs.error_code")
 /* ESR_EL1 fields we care about. */
 #define ESR_EL1_WNR		(1UL << 6)	/* data abort was a write */
 
-#define user_mode(regs) 0 /* TODO */
+/*
+ * This is a usermode-emulated port: the guest never executes kernel code, so
+ * native (AArch64) pt_regs are always user mode. The i386 path historically
+ * reported 0; leave it unchanged. Kept as a macro so it expands where
+ * is_compat_task() (thread_info.h) is available.
+ */
+#define user_mode(regs)	(is_compat_task() ? 0 : 1)
 
 #define user_stack_pointer(regs) ((regs)->sp)
 #define instruction_pointer(regs) \

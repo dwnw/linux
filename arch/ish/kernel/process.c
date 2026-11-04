@@ -45,7 +45,7 @@ static void show_signal(struct task_struct *task, const char *desc, unsigned lon
 	if (show_unhandled_signals) {
 		struct pt_regs *regs = task_pt_regs(task);
 		printk("%s[%d] %s addr:%lx ip:%lx sp:%lx\n", task->comm,
-		       task_pid_nr(task), desc, addr, regs->ip, regs->sp);
+		       task_pid_nr(task), desc, addr, instruction_pointer(regs), regs->sp);
 	}
 }
 

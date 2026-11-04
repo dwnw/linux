@@ -78,12 +78,13 @@ extern void start_thread(struct pt_regs *regs, unsigned long entry,
 
 #define STACK_TOP	TASK_SIZE
 /*
- * bprm_mm_init() runs before SET_PERSONALITY2(), and forked children already
- * carry the inherited ABI flag, so STACK_TOP_MAX can follow the per-task
- * TASK_SIZE. This avoids a pointless (and expensive) 47-bit -> 32-bit
- * stack shift for i386 execs.
+ * bprm_mm_init() runs before SET_PERSONALITY2() and before the new binary's
+ * ABI is known, so the temporary stack must be placed at the maximum address
+ * and shifted down to the per-task STACK_TOP afterwards (standard model).
+ * This is what lets a compat init exec a native AArch64 binary (32->47) as
+ * well as an i386 binary (47->32).
  */
-#define STACK_TOP_MAX	TASK_SIZE
+#define STACK_TOP_MAX	TASK_SIZE_MAX
 
 #endif
 

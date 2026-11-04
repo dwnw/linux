@@ -121,8 +121,8 @@ void signal_fault(struct pt_regs *regs, void __user *frame, char *where)
 		       "%s[%d] bad frame in %s frame:%p ip:%lx sp:%lx orax:%lx",
 		       task_pid_nr(current) > 1 ? KERN_INFO : KERN_EMERG,
 		       me->comm, me->pid, where, frame,
-		       regs->ip, regs->sp, regs->orig_ax);
-		print_vma_addr(KERN_CONT " in ", regs->ip);
+		       instruction_pointer(regs), regs->sp, regs->orig_ax);
+		print_vma_addr(KERN_CONT " in ", instruction_pointer(regs));
 		pr_cont("\n");
 	}
 
