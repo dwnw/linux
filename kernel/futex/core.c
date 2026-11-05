@@ -455,6 +455,19 @@ int futex_cmpxchg_value_locked(u32 *curval, u32 __user *uaddr, u32 uval, u32 new
 
 int futex_get_value_locked(u32 *dest, u32 __user *from)
 {
+#ifdef CONFIG_ISH
+	/*
+	 * iSH cannot dereference guest user VAs directly; the asm-generic
+	 * __get_user path mis-reads here (FUTEX_WAIT then slept even when
+	 * *uaddr != val, losing the wakeup and hanging pthread_join). Read
+	 * through the translating copy helper instead.
+	 */
+	u32 v = 0;
+	if (raw_copy_from_user(&v, from, sizeof(v)))
+		return -EFAULT;
+	*dest = v;
+	return 0;
+#else
 	int ret;
 
 	pagefault_disable();
@@ -462,6 +475,7 @@ int futex_get_value_locked(u32 *dest, u32 __user *from)
 	pagefault_enable();
 
 	return ret ? -EFAULT : 0;
+#endif
 }
 
 /**
