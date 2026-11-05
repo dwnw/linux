@@ -486,6 +486,11 @@ void host_pause(void)
 	pause();
 }
 
+void host_exit(int status)
+{
+	_exit(status);
+}
+
 void *host_mmap(void *addr, size_t len)
 {
 	return mmap(addr, len, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_ANONYMOUS, -1, 0);

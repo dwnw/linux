@@ -10,6 +10,7 @@
  * to indicate a major problem.
  */
 #include <linux/debug_locks.h>
+#include <user/user.h>
 #include <linux/sched/debug.h>
 #include <linux/interrupt.h>
 #include <linux/kgdb.h>
@@ -175,6 +176,8 @@ static void panic_print_sys_info(void)
  *
  *	This function never returns.
  */
+int ish_halt_status = -1;
+
 void panic(const char *fmt, ...)
 {
 	static char buf[1024];
@@ -224,6 +227,8 @@ void panic(const char *fmt, ...)
 		buf[len - 1] = '\0';
 
 	pr_emerg("Kernel panic - not syncing: %s\n", buf);
+	if (host_getenv("ISH_EXIT_ON_HALT"))
+		host_exit(ish_halt_status < 0 ? 1 : ish_halt_status);
 #ifdef CONFIG_DEBUG_BUGVERBOSE
 	/*
 	 * Avoid nested stack-dumping if a panic occurs during oops processing

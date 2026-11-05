@@ -11,6 +11,7 @@
 #include <linux/sched/mm.h>
 #include <linux/sched/stat.h>
 #include <linux/sched/task.h>
+extern int ish_halt_status;
 #include <linux/sched/task_stack.h>
 #include <linux/sched/cputime.h>
 #include <linux/interrupt.h>
@@ -797,9 +798,13 @@ void __noreturn do_exit(long code)
 		 * If the last thread of global init has exited, panic
 		 * immediately to get a useable coredump.
 		 */
-		if (unlikely(is_global_init(tsk)))
-			panic("Attempted to kill init! exitcode=0x%08x\n",
-				tsk->signal->group_exit_code ?: (int)code);
+		if (unlikely(is_global_init(tsk))) {
+			int ecode = tsk->signal->group_exit_code ?: (int)code;
+			/* Host exit status: normal exit code, else 128+signal. */
+			ish_halt_status = (ecode & 0xff) ?
+				128 + (ecode & 0x7f) : ((ecode >> 8) & 0xff);
+			panic("Attempted to kill init! exitcode=0x%08x\n", ecode);
+		}
 
 #ifdef CONFIG_POSIX_TIMERS
 		hrtimer_cancel(&tsk->signal->real_timer);
