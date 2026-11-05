@@ -165,7 +165,11 @@ void handle_cpu_trap(struct emu *emu)
 		show_signal(current, "undefined", regs->far);
 		force_sig_fault(SIGILL, SI_KERNEL, (void __user *) regs->far);
 	} else if (regs->trap_nr == 0x20) {
-		/* timer */
+		/* Periodic preemption quantum / poke. This is a safe point, so
+		 * force a reschedule: otherwise a CPU-bound guest thread that
+		 * never traps (e.g. a spinlock) would starve its siblings, since
+		 * the host runs one guest thread per task. */
+		set_tsk_need_resched(current);
 	} else {
 		show_signal(current, "mysterious interrupt", regs->trap_nr);
 		force_sig_fault(SIGSEGV, SI_KERNEL, 0);
@@ -205,9 +209,15 @@ int copy_thread(unsigned long clone_flags, unsigned long usp,
 	else
 		task_pt_regs(p)->regs[0] = 0;
 	if (clone_flags & CLONE_SETTLS) {
-		int err = do_set_thread_area(p, (struct user_desc __user *) tls);
-		if (err < 0)
-			return err;
+		if (is_compat_task()) {
+			int err = do_set_thread_area(p, (struct user_desc __user *) tls);
+			if (err < 0)
+				return err;
+		} else {
+			/* AArch64: the clone tls argument is the thread pointer
+			 * itself, which lives in tpidr_el0 (no LDT). */
+			task_pt_regs(p)->tpidr_el0 = tls;
+		}
 	}
 	if (usp) {
 		task_pt_regs(p)->sp = usp;
