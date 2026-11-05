@@ -163,6 +163,22 @@ late_initcall(a64_syscall_table_check);
 
 /* Re-point the stat family at the aarch64-layout wrappers. */
 extern void *sys_call_table64[];
+
+/*
+ * AArch64 clone ABI is (flags, newsp, parent_tidptr, tls, child_tidptr)
+ * (tls is the 4th argument), whereas this kernel's sys_clone is the default
+ * (flags, newsp, parent_tidptr, child_tidptr, tls). Without this swap the
+ * child's tpidr_el0 is set from the ctid address and vice-versa, which
+ * corrupts libc TLS and crashes in __pthread_exit.
+ */
+extern long sys_clone(unsigned long, unsigned long, int __user *,
+		      int __user *, unsigned long);
+static long sys_a64_clone(unsigned long flags, unsigned long newsp,
+			  int __user *ptid, unsigned long tls, int __user *ctid)
+{
+	return sys_clone(flags, newsp, ptid, ctid, tls);
+}
+
 static int __init a64_stat_family_override(void)
 {
 	/* AArch64 numbers are ABI-stable: __NR_fstat = 80, __NR_newfstatat = 79. */
@@ -171,6 +187,7 @@ static int __init a64_stat_family_override(void)
 	/* aarch64 open/fcntl use aarch64 O_* flag values */
 	sys_call_table64[56] = sys_a64_openat;   /* openat */
 	sys_call_table64[25] = sys_a64_fcntl;    /* fcntl  */
+	sys_call_table64[220] = sys_a64_clone;   /* clone (aarch64 arg order) */
 	return 0;
 }
 late_initcall(a64_stat_family_override);
