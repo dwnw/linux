@@ -39,6 +39,8 @@ void flush_thread(void)
 
 /* TODO put this in a header */
 extern int handle_page_fault(unsigned long address, int is_write, int *code_out);
+extern int handle_page_fault_emu(struct emu_mm *emu_mm, unsigned long address,
+				 int is_write, int *code_out);
 
 int show_unhandled_signals = 1; /* TODO this may not be the place */
 static void show_signal(struct task_struct *task, const char *desc, unsigned long addr) {
@@ -91,6 +93,9 @@ void handle_cpu_trap(struct emu *emu)
 	struct pt_regs *regs = emu_pt_regs(emu);
 	unsigned long run_time_us;
 
+	/* This task's emu is what is running; make `current` agree even if a
+	 * prior schedule() on this thread left it pointing at another task. */
+	__set_current(emu_task(emu));
 	run_time_us = ktime_to_us(ktime_sub(ktime_get(), current->thread.last_trap_time));
 	if (run_time_us > 50000)
 		pr_warn("emulator ran for %luus!", run_time_us);
@@ -172,15 +177,15 @@ void handle_cpu_trap(struct emu *emu)
 		trace_syscall_exit(regs);
 	} else if (regs->trap_nr == A64_TRAP_DATA_ABORT) {
 		int code;
-		int err = handle_page_fault(regs->far, !!(regs->esr & ESR_EL1_WNR),
-					    &code);
+		int err = handle_page_fault_emu(emu->mm, regs->far,
+						!!(regs->esr & ESR_EL1_WNR), &code);
 		if (err != 0) {
 			show_signal(current, "data abort", regs->far);
 			force_sig_fault(SIGSEGV, code, (void __user *) regs->far);
 		}
 	} else if (regs->trap_nr == A64_TRAP_INSN_ABORT) {
 		int code;
-		int err = handle_page_fault(regs->far, 0, &code);
+		int err = handle_page_fault_emu(emu->mm, regs->far, 0, &code);
 		if (err != 0) {
 			show_signal(current, "insn abort", regs->far);
 			force_sig_fault(SIGSEGV, code, (void __user *) regs->far);
