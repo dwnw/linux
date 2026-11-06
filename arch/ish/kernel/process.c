@@ -92,20 +92,10 @@ void handle_cpu_trap(struct emu *emu)
 {
 	struct pt_regs *regs = emu_pt_regs(emu);
 	unsigned long run_time_us;
-	struct task_struct *etask = emu_task(emu);
-	static int __dbg;
 
-	if (current != etask && __dbg++ < 12)
-		pr_warn("trap: current=%s/%d(mmm %px) emu_task=%s/%d(mmm %px) pc=%lx trap=%lx\n",
-			current->comm, current->pid, current->mm,
-			etask->comm, etask->pid, etask->mm,
-			regs->pc, regs->trap_nr);
 	/* This task's emu is what is running; make `current` agree even if a
 	 * prior schedule() on this thread left it pointing at another task. */
-	__set_current(etask);
-	if (current != etask && __dbg++ < 24)
-		pr_warn("trap: __set_current did not stick (now %s/%d)\n",
-			current->comm, current->pid);
+	__set_current(emu_task(emu));
 	run_time_us = ktime_to_us(ktime_sub(ktime_get(), current->thread.last_trap_time));
 	if (run_time_us > 50000)
 		pr_warn("emulator ran for %luus!", run_time_us);

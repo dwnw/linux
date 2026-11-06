@@ -60,17 +60,10 @@ void *user_to_kernel_emu(struct emu_mm *emu_mm, unsigned long virt, bool *writab
 	 * breaks across the longjmp-based stack moves, so it can be momentarily
 	 * stale after a context switch; asserting here needlessly panics.
 	 * Use `mm` (which is what the access is actually against). */
-	if (mm != (current ? current->mm : NULL)) {
-		static int __dbg;
-		if (__dbg++ < 12)
-			pr_warn("user_to_kernel_emu: mm %px owner=%s/%d != current->mm %px %s/%d\n",
-				mm,
-				mm->owner ? mm->owner->comm : "?",
-				mm->owner ? mm->owner->pid : -1,
-				current ? current->mm : NULL,
-				current ? current->comm : "?",
-				current ? current->pid : -1);
-	}
+	if (mm != (current ? current->mm : NULL))
+		pr_warn_once("user_to_kernel_emu: mm %px != current->mm %px (comm=%s)\n",
+			     mm, current ? current->mm : NULL,
+			     current ? current->comm : "?");
 
 	pte = virt_to_pte(mm, virt);
 	if (pte == NULL || !pte_present(*pte))
