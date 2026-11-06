@@ -54,6 +54,30 @@ struct pt_regs *emu_pt_regs(struct emu *emu)
 	return &container_of(emu, struct thread_struct, emu)->regs;
 }
 
+struct task_struct *emu_task(struct emu *emu)
+{
+	struct thread_struct *thread = container_of(emu, struct thread_struct, emu);
+	return container_of(thread, struct task_struct, thread);
+}
+
+/* On Darwin `current` (pthread-specific) can be stale across iSH's longjmp
+ * stack moves. Set it to the task whose emu we are about to run. */
+void emu_set_current(struct emu *emu)
+{
+	__set_current(emu_task(emu));
+}
+
+/* The task's current mm (thread.emu.mm is not updated across execve). */
+struct emu_mm *emu_current_mm(struct emu *emu)
+{
+	struct task_struct *t = emu_task(emu);
+	if (t->mm)
+		return &t->mm->context.emu_mm;
+	if (t->active_mm)
+		return &t->active_mm->context.emu_mm;
+	return NULL;
+}
+
 void *emu_fpsimd(struct emu *emu)
 {
 	return &container_of(emu, struct thread_struct, emu)->fpsimd;
