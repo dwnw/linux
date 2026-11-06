@@ -37,17 +37,6 @@ static void uiovec_grow(struct uiovec *uio)
 		uio->vec = krealloc(uio->vec, uio->cap * sizeof(struct kvec), GFP_KERNEL);
 	}
 }
-static int iterate_iov_to_uiovec(struct kvec *iov, void *array)
-{
-	struct uiovec *uio = array;
-	uiovec_grow(uio);
-	if (uio->vec == NULL)
-		return -ENOMEM;
-	uio->vec[uio->len].base = iov->iov_base;
-	uio->vec[uio->len].len = iov->iov_len;
-	uio->len++;
-	return 0;
-}
 static int uiovec_from_iov_iter(struct iov_iter *iter, size_t n, struct uiovec *uio)
 {
 	int err;
@@ -61,10 +50,6 @@ static int uiovec_from_iov_iter(struct iov_iter *iter, size_t n, struct uiovec *
 	uio->len = 0;
 	uio->vec = NULL;
 	uio->nr_pages = 0;
-	err = iov_iter_for_each_range(iter, n, iterate_iov_to_uiovec, uio);
-	if (!(err == -EINVAL && uio->vec == NULL)) {
-		return err;
-	}
 
 	/* returns a bunch of pages as pages, offset into the first page as start, and total byte length */
 	bytes = iov_iter_get_pages_alloc(iter, &pages, n, &offset);
@@ -287,8 +272,8 @@ static struct proto_ops host_inet_ops = {
 	.connect = host_inet_connect,
 	.getname = host_inet_getname,
 	.poll = host_inet_poll,
-	.setsockopt = sock_no_setsockopt,
-	.getsockopt = sock_no_getsockopt,
+	.setsockopt = sock_setsockopt,
+	.getsockopt = sock_getsockopt,
 	.sendmsg = host_inet_sendmsg,
 	.recvmsg = host_inet_recvmsg,
 };
