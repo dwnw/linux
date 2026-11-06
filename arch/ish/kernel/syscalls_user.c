@@ -261,6 +261,12 @@ int host_socket(int domain, int type, int protocol)
 	int sock = socket(domain, type, protocol);
 	if (sock < 0)
 		return errno_map();
+#if defined(__APPLE__)
+	/* Darwin has no MSG_NOSIGNAL; without SO_NOSIGPIPE a write to a broken
+	 * connection raises SIGPIPE and can kill the app. */
+	int one = 1;
+	setsockopt(sock, SOL_SOCKET, SO_NOSIGPIPE, &one, sizeof(one));
+#endif
 	return sock;
 }
 
