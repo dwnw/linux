@@ -1,11 +1,12 @@
 #include <linux/mm.h>
 #include <linux/uaccess.h>
+#include <emu/kernel.h>
 
 /* stolen from um */
 
-int handle_page_fault(unsigned long address, int is_write, int *code_out)
+int handle_page_fault_mm(struct mm_struct *mm, unsigned long address,
+			 int is_write, int *code_out)
 {
-	struct mm_struct *mm = current->mm;
 	struct vm_area_struct *vma;
 	vm_fault_t fault;
 	int err = -EFAULT;
@@ -83,4 +84,18 @@ out_of_memory:
 	mmap_read_unlock(mm);
 	pagefault_out_of_memory();
 	return 0;
+}
+
+int handle_page_fault(unsigned long address, int is_write, int *code_out)
+{
+	return handle_page_fault_mm(current->mm, address, is_write, code_out);
+}
+
+/* Fault for the mm the emulator is running, which is authoritative even when
+ * `current` (pthread-specific on Darwin) is momentarily stale. */
+int handle_page_fault_emu(struct emu_mm *emu_mm, unsigned long address,
+			  int is_write, int *code_out)
+{
+	struct mm_struct *mm = container_of(emu_mm, struct mm_struct, context.emu_mm);
+	return handle_page_fault_mm(mm, address, is_write, code_out);
 }
