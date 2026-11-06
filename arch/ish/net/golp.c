@@ -37,7 +37,9 @@ static int golp_up(struct net_device *dev)
 	IN_DEV_CONF_SET(__in_dev_get_rtnl(dev), ROUTE_LOCALNET, 1);
 
 	err = golp_ping_up(dev);
-	if (err < 0) return err;
+	if (err < 0)
+		pr_warn("golp: ping setup failed (%pe); continuing without ICMP\n",
+			ERR_PTR(err));
 	return 0;
 }
 

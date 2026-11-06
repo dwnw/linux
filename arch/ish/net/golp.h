@@ -42,6 +42,7 @@ struct golp_socket {
 
 struct golp_priv {
 	struct golp_socket *ping_sock;
+	bool ping_emulated;
 	int irq_pipe_read, irq_pipe_write;
 	DECLARE_HASHTABLE(udp_hash, 8);
 	DECLARE_HASHTABLE(tcp_hash, 8);
