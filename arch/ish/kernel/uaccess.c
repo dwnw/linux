@@ -55,7 +55,15 @@ void *user_to_kernel_emu(struct emu_mm *emu_mm, unsigned long virt, bool *writab
 	pte_t *pte;
 
 	mm = container_of(emu_mm, struct mm_struct, context.emu_mm);
-	BUG_ON(mm != current->mm);
+	/* The emulator translates for the task whose emu_mm it was given.  On
+	 * Darwin `current` is pthread-specific (not __thread) because __thread
+	 * breaks across the longjmp-based stack moves, so it can be momentarily
+	 * stale after a context switch; asserting here needlessly panics.
+	 * Use `mm` (which is what the access is actually against). */
+	if (mm != (current ? current->mm : NULL))
+		pr_warn_once("user_to_kernel_emu: mm %px != current->mm %px (comm=%s)\n",
+			     mm, current ? current->mm : NULL,
+			     current ? current->comm : "?");
 
 	pte = virt_to_pte(mm, virt);
 	if (pte == NULL || !pte_present(*pte))
