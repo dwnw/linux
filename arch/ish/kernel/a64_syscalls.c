@@ -9,6 +9,8 @@
 #include <linux/uidgid.h>
 #include <linux/uaccess.h>
 #include <linux/sched.h>
+#include <linux/utsname.h>
+#include <linux/string.h>
 #include <asm/syscall.h>
 
 /*
@@ -179,6 +181,23 @@ static long sys_a64_clone(unsigned long flags, unsigned long newsp,
 	return sys_clone(flags, newsp, ptid, ctid, tls);
 }
 
+
+/* The ish arch sets UTS_MACHINE to "i686" (it originally only ran i386
+ * guests). AArch64 tasks must report "aarch64" from uname(2). */
+extern long sys_newuname(struct new_utsname __user *name);
+static long sys_a64_newuname(struct new_utsname __user *name)
+{
+	long ret = sys_newuname(name);
+
+	if (ret == 0 && is_task_a64(current)) {
+		char m[sizeof(((struct new_utsname *)0)->machine)] = {0};
+		strscpy(m, "aarch64", sizeof(m));
+		if (copy_to_user(name->machine, m, sizeof(m)))
+			return -EFAULT;
+	}
+	return ret;
+}
+
 static int __init a64_stat_family_override(void)
 {
 	/* AArch64 numbers are ABI-stable: __NR_fstat = 80, __NR_newfstatat = 79. */
@@ -188,6 +207,7 @@ static int __init a64_stat_family_override(void)
 	sys_call_table64[56] = sys_a64_openat;   /* openat */
 	sys_call_table64[25] = sys_a64_fcntl;    /* fcntl  */
 	sys_call_table64[220] = sys_a64_clone;   /* clone (aarch64 arg order) */
+	sys_call_table64[160] = sys_a64_newuname; /* uname: report aarch64 */
 	return 0;
 }
 late_initcall(a64_stat_family_override);
