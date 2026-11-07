@@ -3,6 +3,7 @@
 #include <linux/net.h>
 #include <linux/printk.h>
 #include <linux/uio.h>
+#include <linux/slab.h>
 #include <net/sock.h>
 #include <user/fs.h>
 
@@ -15,74 +16,6 @@ struct host_sock {
 static struct host_sock *host_sk(struct sock *sk)
 {
 	return (struct host_sock *) sk;
-}
-
-/* turn an iov_iter into an iovec array */
-
-struct uiovec {
-	struct user_iovec *vec;
-	size_t len;
-	size_t cap;
-	struct page **pages;
-	size_t nr_pages;
-};
-static void uiovec_grow(struct uiovec *uio)
-{
-	if (uio->len >= uio->cap) {
-		if (uio->cap == 0)
-			uio->cap = 8;
-		else
-			uio->cap *= 2;
-		/* TODO check for failure */
-		uio->vec = krealloc(uio->vec, uio->cap * sizeof(struct kvec), GFP_KERNEL);
-	}
-}
-static int uiovec_from_iov_iter(struct iov_iter *iter, size_t n, struct uiovec *uio)
-{
-	int err;
-	struct page **pages;
-	size_t offset;
-	ssize_t bytes;
-	int npages;
-	ssize_t i;
-
-	uio->cap = 0;
-	uio->len = 0;
-	uio->vec = NULL;
-	uio->nr_pages = 0;
-
-	/* returns a bunch of pages as pages, offset into the first page as start, and total byte length */
-	bytes = iov_iter_get_pages_alloc(iter, &pages, n, &offset);
-	if (bytes < 0)
-		return bytes;
-	if (bytes == 0)
-		return -ENOMEM;
-
-	npages = DIV_ROUND_UP(bytes + offset, PAGE_SIZE);
-	for (i = 0; i < npages; i++) {
-		size_t len;
-
-		uiovec_grow(uio);
-		len = min_t(size_t, PAGE_SIZE - offset, bytes);
-		uio->vec[uio->len].base = kmap(pages[i]) + offset;
-		uio->vec[uio->len].len = len;
-		uio->len++;
-		offset = 0;
-		bytes -= len;
-	}
-
-	uio->pages = pages;
-	uio->nr_pages = npages;
-	return 0;
-}
-static void uiovec_free(struct uiovec *uio)
-{
-	size_t i;
-
-	kfree(uio->vec);
-	for (i = 0; i < uio->nr_pages; i++) {
-		put_page(uio->pages[i]);
-	}
 }
 
 /* util */
@@ -122,7 +55,8 @@ static int host_inet_sendmsg(struct socket *sock, struct msghdr *m, size_t total
 {
 	struct sock *sk = sock->sk;
 	struct host_sock *host = host_sk(sk);
-	struct uiovec uio;
+	struct user_iovec iov;
+	void *kbuf;
 	int err;
 	long timeo;
 	DEFINE_WAIT(wait);
@@ -134,9 +68,17 @@ static int host_inet_sendmsg(struct socket *sock, struct msghdr *m, size_t total
 		printk("oh no a control message\n");
 		return -EINVAL; // TODO
 	}
-	err = uiovec_from_iov_iter(&m->msg_iter, total_len, &uio);
-	if (err < 0)
-		return err;
+	if (total_len == 0)
+		return 0;
+	kbuf = kmalloc(total_len, GFP_KERNEL);
+	if (!kbuf)
+		return -ENOMEM;
+	if (copy_from_iter(kbuf, total_len, &m->msg_iter) != total_len) {
+		kfree(kbuf);
+		return -EFAULT;
+	}
+	iov.base = kbuf;
+	iov.len = total_len;
 
 	timeo = sock_sndtimeo(sk, m->msg_flags & MSG_DONTWAIT);
 	for (;;) {
@@ -144,7 +86,7 @@ static int host_inet_sendmsg(struct socket *sock, struct msghdr *m, size_t total
 		host_flags &= ~(MSG_DONTWAIT | MSG_NOSIGNAL);
 
 		prepare_to_wait(sk_sleep(sk), &wait, TASK_INTERRUPTIBLE);
-		err = host_sendmsg(host->fd, uio.vec, uio.len, m->msg_name, m->msg_namelen, host_flags);
+		err = host_sendmsg(host->fd, &iov, 1, m->msg_name, m->msg_namelen, host_flags);
 		if (err != -EAGAIN || !timeo)
 			break;
 		if (signal_pending(current)) {
@@ -154,7 +96,7 @@ static int host_inet_sendmsg(struct socket *sock, struct msghdr *m, size_t total
 		timeo = schedule_timeout(timeo);
 	}
 	finish_wait(sk_sleep(sk), &wait);
-	uiovec_free(&uio);
+	kfree(kbuf);
 
 	if (sk->sk_type == SOCK_STREAM)
 		err = sk_stream_error(sk, m->msg_flags, err);
@@ -165,7 +107,8 @@ static int host_inet_recvmsg(struct socket *sock, struct msghdr *m, size_t total
 {
 	struct sock *sk = sock->sk;
 	struct host_sock *host = host_sk(sk);
-	struct uiovec uio;
+	struct user_iovec iov;
+	void *kbuf;
 	int err;
 	int noblock;
 	long timeo;
@@ -175,13 +118,17 @@ static int host_inet_recvmsg(struct socket *sock, struct msghdr *m, size_t total
 	flags &= ~MSG_DONTWAIT;
 	flags &= ~MSG_CMSG_COMPAT; /* doesn't matter for inet messages */
 
-	err = uiovec_from_iov_iter(&m->msg_iter, total_len, &uio);
-	if (err < 0)
-		return err;
+	if (total_len == 0)
+		return 0;
+	kbuf = kmalloc(total_len, GFP_KERNEL);
+	if (!kbuf)
+		return -ENOMEM;
+	iov.base = kbuf;
+	iov.len = total_len;
 	timeo = sock_rcvtimeo(sk, noblock);
 	for (;;) {
 		prepare_to_wait(sk_sleep(sk), &wait, TASK_INTERRUPTIBLE);
-		err = host_recvmsg(host->fd, uio.vec, uio.len, m->msg_name, &m->msg_namelen, &m->msg_flags, flags);
+		err = host_recvmsg(host->fd, &iov, 1, m->msg_name, &m->msg_namelen, &m->msg_flags, flags);
 		if (err != -EAGAIN || !timeo)
 			break;
 		if (signal_pending(current)) {
@@ -191,7 +138,12 @@ static int host_inet_recvmsg(struct socket *sock, struct msghdr *m, size_t total
 		timeo = schedule_timeout(timeo);
 	}
 	finish_wait(sk_sleep(sk), &wait);
-	uiovec_free(&uio);
+	if (err > 0) {
+		size_t copied = copy_to_iter(kbuf, err, &m->msg_iter);
+		if (copied != (size_t) err)
+			err = -EFAULT;
+	}
+	kfree(kbuf);
 
 	if (sk->sk_type == SOCK_STREAM)
 		err = sk_stream_error(sk, flags, err);
