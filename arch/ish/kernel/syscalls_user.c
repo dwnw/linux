@@ -406,6 +406,18 @@ int host_get_so_nwrite(int fd, uint32_t *res)
 #endif
 }
 
+int host_get_so_nread(int fd, uint32_t *res)
+{
+#if defined(__APPLE__)
+	return __host_getsockopt(fd, SOL_SOCKET, SO_NREAD, res, sizeof(*res));
+#elif defined(__linux__)
+	int err = ioctl(fd, FIONREAD, res);
+	if (err < 0)
+		return errno_map();
+	return 0;
+#endif
+}
+
 int host_get_so_sndbuf(int fd, uint32_t *res)
 {
 	return __host_getsockopt(fd, SOL_SOCKET, SO_SNDBUF, res, sizeof(*res));

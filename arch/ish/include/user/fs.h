@@ -84,6 +84,7 @@ int host_connect(int fd, void *name, int name_len);
 int host_getname(int fd, void *name, int name_len, int type);
 int host_get_so_error(int fd);
 int host_get_so_nwrite(int fd, uint32_t *res);
+int host_get_so_nread(int fd, uint32_t *res);
 int host_get_so_sndbuf(int fd, uint32_t *res);
 int host_set_so_reuseport(int fd, int value);
 int host_set_so_linger(int fd, int linger, int interval);

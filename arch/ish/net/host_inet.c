@@ -4,6 +4,19 @@
 #include <linux/printk.h>
 #include <linux/uio.h>
 #include <linux/slab.h>
+#include <linux/sockios.h>
+#include <linux/uaccess.h>
+
+/* asm-generic numbers as seen by the aarch64 guest */
+#ifndef FIONBIO
+#define FIONBIO 0x5421
+#endif
+#ifndef FIONREAD
+#define FIONREAD 0x541B
+#endif
+#ifndef TIOCOUTQ
+#define TIOCOUTQ 0x5411
+#endif
 #include <net/sock.h>
 #include <user/fs.h>
 
@@ -216,6 +229,32 @@ static int host_inet_getname(struct socket *sock, struct sockaddr *addr, int pee
 	return host_getname(host->fd, addr, sizeof(*addr), peer);
 }
 
+static int host_inet_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
+{
+	struct host_sock *host = host_sk(sock->sk);
+	void __user *argp = (void __user *) arg;
+	uint32_t n;
+	int err;
+
+	switch (cmd) {
+	case FIONBIO:
+		/* Non-blocking state lives on the socket file; nothing to do. */
+		return 0;
+	case FIONREAD:
+		err = host_get_so_nread(host->fd, &n);
+		if (err < 0)
+			return err;
+		return put_user((int) n, (int __user *) argp);
+	case TIOCOUTQ:
+		err = host_get_so_nwrite(host->fd, &n);
+		if (err < 0)
+			return err;
+		return put_user((int) n, (int __user *) argp);
+	default:
+		return -ENOIOCTLCMD;
+	}
+}
+
 static struct proto_ops host_inet_ops = {
 	.family = PF_INET,
 	.owner = THIS_MODULE,
@@ -228,6 +267,7 @@ static struct proto_ops host_inet_ops = {
 	.getsockopt = sock_getsockopt,
 	.sendmsg = host_inet_sendmsg,
 	.recvmsg = host_inet_recvmsg,
+	.ioctl = host_inet_ioctl,
 };
 
 static struct proto ping_proto = {
